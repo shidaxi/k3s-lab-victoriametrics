@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    reloader.stakater.com/auto: "true"
+  labels:
+    app: prometheusalert
+  name: prometheusalert
+  namespace: monitor-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheusalert
+  template:
+    metadata:
+      labels:
+        app: prometheusalert
+    spec:
+      containers:
+      - name: prometheusalert
+        # image: feiyu563/prometheus-alert
+        image: shidaxi/prometheus-alert:v4.8.2-c
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+        env:
+        - name: PORT
+          value: "4000"
+        - name: PA_FSURL
+          value: ''
+        - name: PA_LOGIN_USER
+          value: admin
+        - name: PA_LOGIN_PASSWORD
+          value: admin
+        - name: PA_TITLE
+          value: Alert
+        - name: PA_OPEN_FEISHU
+          value: "1"
+        - name: PA_APPWORKS_REDIS_HOST
+          value: redis:6379
+        command: 
+        - sh
+        - -c
+        args: 
+        - "rm ./db/PrometheusAlertDB.db && cat ./db/prometheusalert.sql | sqlite3 ./db/PrometheusAlertDB.db; sh ./docker-entrypoint.sh"
+        volumeMounts:
+          - name: config
+            mountPath: /app/db/prometheusalert.sql
+            subPath: prometheusalert.sql
+        resources:
+          limits:
+            cpu: 200m
+            memory: 200Mi
+          requests:
+            cpu: 50m
+            memory: 200Mi
+      volumes:
+      - name: config
+        configMap:
+          name: prometheusalert
+          defaultMode: 0777

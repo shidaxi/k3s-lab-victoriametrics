@@ -1,0 +1,93 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheusalert
+  namespace: monitor-system
+data:
+  prometheusalert.sql: |
+    PRAGMA synchronous = OFF;
+    PRAGMA journal_mode = MEMORY;
+    BEGIN TRANSACTION;
+    CREATE TABLE `prometheus_alert_d_b` (
+      `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT
+    ,  `tpltype` varchar(255) NOT NULL DEFAULT ''
+    ,  `tpluse` varchar(255) NOT NULL DEFAULT ''
+    ,  `tplname` varchar(255) NOT NULL DEFAULT ''
+    ,  `tpl` longtext NOT NULL
+    ,  `created` datetime NOT NULL
+    );
+    INSERT INTO `prometheus_alert_d_b` VALUES ('3', 'fs', 'Prometheus', 'prometheus-fs', '{{ $var := .externalURL}}{{ range $k,$v:=.alerts }}
+    {{if eq $v.status "resolved"}}
+    **✅✅✅[Recover {{$v.labels.env}}]({{$v.generatorURL}})** *[{{$v.labels.alertname}}]({{$var}})*
+    ![警报 图标](https://i01piccdn.sogoucdn.com/2dbf8a9d48e921e7)
+    **=====故障已恢复=====**
+    Level：**{{$v.labels.level}}**
+    Severity：**{{$v.labels.severity}}**
+    Start at：{{$v.startsAt}}
+    End at：{{$v.endsAt}}
+    Owners: **{{$v.labels.owners}}**, OU: **{{$v.labels.ou}}**, Cluster: **{{$v.labels.cluster}}**, Env: **{{$v.labels.env}}**
+    Instance：**{{$v.labels.instance}}**, Service：**{{$v.labels.service}}**, Job：**{{$v.labels.job}}**
+    Description: {{$v.annotations.description}}.
+    {{else}}
+    **💥💥💥[Alert {{$v.labels.env}}]({{$v.generatorURL}})** *[{{$v.labels.alertname}}]({{$var}})*
+    **====侦测到故障====**
+    Level：**{{$v.labels.level}}**
+    Severity：**{{$v.labels.severity}}**
+    Start at：{{$v.startsAt}}
+    End at：{{$v.endsAt}}
+    Owners: **{{$v.labels.owners}}**, OU: **{{$v.labels.ou}}**, Cluster: **{{$v.labels.cluster}}**, Env: **{{$v.labels.env}}**
+    Instance：**{{$v.labels.instance}}**, Service：**{{$v.labels.service}}**, Job：**{{$v.labels.job}}**
+    Description: {{$v.annotations.description}} 
+    Link: **[Runbook]({{$v.annotations.runbook_url}})** | **[Grafana]({{$v.annotations.grafana_url}})**
+    At: {{html $v.annotations.at}}
+    {{end}}
+    {{ end }}', '2020-12-22 03:07:39');
+    INSERT INTO `prometheus_alert_d_b` VALUES ('4', 'fs', 'Prometheus', 'prometheus-elastalert-fs', '{{ $var := .externalURL}}{{ range $k,$v:=.alerts }}
+    {{if eq $v.status "resolved"}}
+    **✅✅✅[Recover {{$v.labels.env}}]({{$v.generatorURL}})** *[{{$v.labels.alertname}}]({{$var}})*
+    ![警报 图标](https://i01piccdn.sogoucdn.com/2dbf8a9d48e921e7)
+    **=====故障已恢复=====**
+    Level：**{{$v.labels.level}}**
+    Severity：**{{$v.labels.severity}}**
+    Start at：{{$v.startsAt}}
+    End at：{{$v.endsAt}}
+    Owners: **{{$v.labels.owners}}**, OU: **{{$v.labels.ou}}**, Env: **{{$v.labels.env}}**
+    NumHit：**{{$v.labels.num_hit}}**, AppName：**{{$v.labels.appname}}**, 
+    Msg：**{{$v.labels.msg}}**
+    {{else}}
+    **💥💥💥[Alert {{$v.labels.env}}]({{$v.generatorURL}})** *[{{$v.labels.alertname}}]({{$var}})*
+    **====侦测到故障====**
+    Level：**{{$v.labels.level}}**
+    Severity：**{{$v.labels.severity}}**
+    Start at：{{$v.startsAt}}
+    End at：{{$v.endsAt}}
+    Owners: **{{$v.labels.owners}}**, OU: **{{$v.labels.ou}}**, Env: **{{$v.labels.env}}**
+    NumHit：**{{$v.labels.num_hit}}**, AppName：**{{$v.labels.appname}}**, 
+    Msg：**{{$v.labels.msg}}**
+    Link: **[Runbook]({{$v.annotations.runbook_url}})** | **[Grafana]({{$v.annotations.grafana_url}})**
+    At: {{html $v.annotations.at}}
+    {{end}}
+    {{ end }}', '2020-12-22 03:07:39');
+    CREATE TABLE `alert_record` (
+                                    `id` integer NOT NULL PRIMARY KEY AUTOINCREMENT
+    ,                                `send_type` varchar(255) NOT NULL DEFAULT ''
+    ,                                `alertname` varchar(255) NOT NULL DEFAULT ''
+    ,                                `alert_level` varchar(255) NOT NULL DEFAULT ''
+    ,                                `business_type` varchar(255) NOT NULL DEFAULT ''
+    ,                                `instance` varchar(255) NOT NULL DEFAULT ''
+    ,                                `starts_at` varchar(255) NOT NULL DEFAULT ''
+    ,                                `ends_at` varchar(255) NOT NULL DEFAULT ''
+    ,                                `summary` varchar(255) NOT NULL DEFAULT ''
+    ,                                `description` varchar(255) NOT NULL DEFAULT ''
+    ,                                `handle_status` varchar(255) NOT NULL DEFAULT ''
+    ,                                `alert_status` varchar(255) NOT NULL DEFAULT ''
+    ,                                `alert_json` varchar(255) NOT NULL DEFAULT ''
+    ,                                `remark` varchar(255) NOT NULL DEFAULT ''
+    ,                                `revision` integer NOT NULL DEFAULT '0'
+    ,                                `created_by` varchar(255) NOT NULL DEFAULT ''
+    ,                                `created_time` datetime NOT NULL
+    ,                                `updated_by` varchar(255) NOT NULL DEFAULT ''
+    ,                                `updated_time` datetime NOT NULL
+    );
+    CREATE INDEX "idx_prometheus_alert_d_b_prometheus_alert_d_b_tplname" ON "prometheus_alert_d_b" (`tplname`);
+    END TRANSACTION;

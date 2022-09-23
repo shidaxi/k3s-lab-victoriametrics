@@ -1,0 +1,164 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  labels:
+    app: common
+  name: common-alertrules
+  namespace: monitor-system
+spec:
+  groups:
+  - name: 1.Domain
+    rules:
+    - alert: 站点可用性
+      expr: probe_success == 0
+      for: 2m
+      labels:
+        alertype: domain
+        severity: critical
+      annotations:
+        description: "{{ $labels.env }}_{{ $labels.name }}({{ $labels.project }})：站点无法访问\n> {{ $labels.instance }}"
+    - alert: 站点1h可用性低于80%
+      expr: sum_over_time(probe_success[1h])/count_over_time(probe_success[1h]) * 100 < 80
+      for: 3m
+      labels:
+        alertype: domain
+        severity: warning
+      annotations:
+        description: "{{ $labels.env }}_{{ $labels.name }}({{ $labels.project }})：站点1h可用性：{{ $value | humanize }}%\n> {{ $labels.instance }}"
+    - alert: 站点状态异常
+      expr: (probe_success == 0 and probe_http_status_code > 499) or probe_http_status_code == 0
+      for: 1m
+      labels:
+        alertype: domain
+        severity: warning
+      annotations:
+        description: "{{ $labels.env }}_{{ $labels.name }}({{ $labels.project }})：站点状态异常：{{ $value }}\n> {{ $labels.instance }}"
+    - alert: 站点耗时过高
+      expr: probe_duration_seconds > 0.5
+      for: 2m
+      labels:
+        alertype: domain
+        severity: warning
+      annotations:
+        description: "{{ $labels.env }}_{{ $labels.name }}({{ $labels.project }})：当前站点耗时：{{ $value | humanize }}s\n> {{ $labels.instance }}"
+    - alert: SSL证书有效期
+      expr: (probe_ssl_earliest_cert_expiry-time()) / 3600 / 24 < 15
+      for: 2m
+      labels:
+        alertype: domain
+        severity: warning
+      annotations:
+        description: "{{ $labels.env }}_{{ $labels.name }}({{ $labels.project }})：证书有效期剩余{{ $value | humanize }}天\n> {{ $labels.instance }}"
+  - name: 2.MSK
+    rules:
+    - alert: MSK磁盘使用率高于90%
+      expr: (node_filesystem_size_bytes{mountpoint="/kafka/datalogs"}-node_filesystem_free_bytes{mountpoint="/kafka/datalogs"}) *100/(node_filesystem_avail_bytes {mountpoint="/kafka/datalogs"}+(node_filesystem_size_bytes{mountpoint="/kafka/datalogs"}-node_filesystem_free_bytes{mountpoint="/kafka/datalogs"})) > 90
+      for: 1m
+      labels:
+        alertype: msk
+        severity: critical
+      annotations:
+        description: "{{ $labels.ou }}_{{ $labels.env }}: MSK磁盘使用率高于90%\n> 节点: {{ $labels.instance }}(当前: {{ $value | humanize }}%)"
+    - alert: MSK cpu使用率高于80%
+      expr: (1 - avg(rate(node_cpu_seconds_total{mode="idle",service=~".*kafka.*"}[5m])) by (env,instance)) *100 > 80
+      for: 3m
+      labels:
+        alertype: msk
+        severity: critical
+      annotations:
+        description: "{{ $labels.ou }}_{{ $labels.env }}: MSK cpu使用率高于80%\n> 节点: {{ $labels.instance }}(当前: {{ $value | humanize }}%)"
+    - alert: MSK topic持续5分钟消费异常
+      expr: |
+        sum by (ou, env, topic, partition) (increase(kafka_log_Log_Value{name="LogEndOffset", topic!~"__.*"}[5m]))
+        -
+        sum by (ou, env, topic, partition) (kafka_consumer_group_ConsumerLagMetrics_Value{name="OffsetLag", topic=~".+"}) 
+        < 0
+      for: 5m
+      labels:
+        alertype: msk
+        severity: critical
+      annotations:
+        description: "{{ $labels.ou }}_{{ $labels.env }}: {{ $labels.topic }}:{{ $labels.partition }} 消费速率异常(当前: {{ $value | humanize }})"
+    - alert: msk持续5分钟消费滞后大于10000条
+      expr: kafka_consumer_group_ConsumerLagMetrics_Value{name="OffsetLag", topic=~".+"} > 10000
+      for: 5m
+      labels:
+        alertype: msk
+        severity: warning
+      annotations:
+        description: "{{ $labels.ou }}_{{ $labels.env }}: \n>Topic={{$labels.topic}}:{{$labels.partition}} Grp: {{$labels.groupId}} \n>持续5分钟消费滞后超过10000条(当前: {{ $value | humanize }}条)"
+    - alert: msk broker down
+      expr: kafka_server_KafkaServer_Value{name=~"BrokerState"} < 3
+      for: 3m
+      labels:
+        alertype: msk
+        severity: critical
+      annotations:
+        description: "{{ $labels.ou }}_{{ $labels.env }}: msk broker down"
+  - name: 3.JVM
+    rules:
+    # 堆空间使用超过90%
+    - alert: heap-usage-too-much
+      expr: sum(jvm_memory_used_bytes{area="heap"}) by (app,instance) * 100 / sum(jvm_memory_max_bytes{area="heap"}) by (app,instance) > 90
+      for: 2m
+      labels:
+        severity: critical
+      annotations:
+        summary: "JVM App {{ $labels.app }} Instance {{ $labels.instance }} heap memory usage > 90%"
+        description: "{{ $labels.instance }} of app {{ $labels.app }} \n>has been in status [heap usage > 90%] for more than 2 minutes. \n>current usage: ({{ $value }}%)"
+    - alert: jvm-high-cpu-usage
+      expr: process_cpu_usage{} * 100 > 80
+      for: 2m
+      labels:
+        severity: critical
+      annotations:
+        summary: "JVM App {{ $labels.app }} Instance {{ $labels.instance }} process_cpu_usage > 80%"
+        description: "{{ $labels.instance }} of app {{ $labels.app }} \n>has been in status [process_cpu_usage > 80% running time] for more than 2 minutes. \n>current value: ({{ $value }}%)"  
+    - alert: jvm-load-load1-high
+      expr: (system_load_average_1m{}) > (system_cpu_count{}) * 1.5 
+      for: 3m
+      labels:
+        severity: critical
+      annotations:
+        summary: "JVM App {{ $labels.app }} Instance {{ $labels.instance }} cpu_load1 负载高于pod_limit_cpu数1.5倍"
+        description: "{{ $labels.instance }} of app {{ $labels.app }} \n>has been in status [cpu_load1 负载高于pod_limit_cpu数1.5倍 running time] for more than 3 minutes. \n>current value: ({{ $value }})"
+    - alert: jvm-http-5xx-error
+      expr: sum without(exception,method,Outcome,instance,pod) (rate(http_server_requests_seconds_count{app!="nacos",status=~"5.."}[1m])) > 0
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "JVM App {{ $labels.app }} jvm最近1分钟{{ $labels.status }}状态码平均每秒访问次数大于0"
+        description: "JVM App {{ $labels.app }} Uri={{ $labels.uri }} \n>[jvm最近1分钟{{ $labels.status }}状态码平均每秒访问次数大于0] for more than 1 minutes. \n>current value: ({{ $value }}次/秒)"
+    - alert: jvm最近5分钟5xx状态码访问率大于5%
+      expr: |
+        sum by(app,instance) (rate(http_server_requests_seconds_count{app!="nacos",status=~"5.."}[5m]))
+        /
+        sum by(app,instance) (rate(http_server_requests_seconds_count{app!="nacos"}[5m])) * 100
+        > 5
+      for: 2m
+      labels:
+        severity: critical
+      annotations:
+        summary: "JVM App {{ $labels.app }} jvm access 5xx error gt 5% in last 5 minutes"
+        description: "JVM App {{ $labels.app }} [jvm access 5xx error gt 5% in last 5 minutes]. \n>current value: ({{ $value }}%)"  
+    - alert: jvm接口持续2分钟平均响应时长大于1000ms
+      expr: |
+        sum by(app,instance,uri) (rate(http_server_requests_seconds_sum{status!~"5.."}[1m]))
+        /
+        sum by(app,instance,uri) (rate(http_server_requests_seconds_count{status!~"5.."}[1m])) * 1000
+        > 1000
+      for: 2m
+      labels:
+        severity: critical
+      annotations:
+        summary: "JVM App {{ $labels.app }} Instance {{ $labels.instance }} jvm Average response time gt 500ms in last 1 minutes"
+        description: "JVM App {{ $labels.app }} Instance {{ $labels.instance }} \n>Uri={{ $labels.uri }} \n>[jvm Average response time gt 1000ms in last 1 minutes]. \n>current value: ({{ $value }}ms)"
+    - alert: jvm-error-logs exceeds 5 within 1 minute
+      expr: increase(logback_events_total{level="error"}[1m]) > 5
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "JVM App {{ $labels.app }} Instance {{ $labels.instance }} jvm-error-logs > 5 in last 1 minutes"
+        description: "JVM App {{ $labels.app }} Instance {{ $labels.instance }} \n>[jvm-error-logs > 5 in last 1 minutes]. \n>current value: ({{ $value }})"

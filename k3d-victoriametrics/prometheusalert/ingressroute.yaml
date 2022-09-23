@@ -1,0 +1,17 @@
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  labels:
+    app: prometheusalert
+  name: prometheusalert
+  namespace: monitor-system
+spec:
+  entryPoints:
+    - webinternal
+  routes:
+  - match: Host(`prometheusalert.example.com`) && PathPrefix(`/`)
+    kind: Rule
+    services:
+    - name: prometheusalert 
+      port: 80
+      passHostHeader: true

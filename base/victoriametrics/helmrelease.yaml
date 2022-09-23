@@ -1,0 +1,172 @@
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: victoriametrics
+  namespace: monitor-system
+spec:
+  releaseName: victoria-metrics-k8s-stack
+  chart:
+    spec:
+      chart: victoria-metrics-k8s-stack
+      version: "0.7.10"
+      sourceRef:
+        kind: HelmRepository
+        name: victoriametrics
+        namespace: flux-system
+  interval: 5m
+  install:
+    remediation:
+      retries: 3
+    createNamespace: true
+  # Default values: https://github.com/VictoriaMetrics/helm-charts/blob/master/charts/victoria-metrics-k8s-stack/values.yaml
+  values: 
+    vmsingle:
+      enabled: false
+    vmcluster:
+      enabled: false
+      ingress:
+        storage:
+          enabled: true
+          annotations: &traefikWebinternalAnnotations
+            kubernetes.io/ingress.class: traefik
+            traefik.ingress.kubernetes.io/router.entrypoints: web
+        select:
+          enabled: true
+          annotations: *traefikWebinternalAnnotations
+        insert:
+          enabled: true
+          annotations: *traefikWebinternalAnnotations
+    vmagent:
+      enabled: true
+      additionalRemoteWrites: []
+      spec:
+        scrapeInterval: 30s
+        externalLabels:
+          cluster: YOUR_CLUSTER_NAME
+          ou: YOUR_OU   
+          env: YOUR_ENV 
+        extraArgs:
+          enableTCP6: "true"
+        inlineRelabelConfig:
+        - action: labelmap
+          regex: label_(.+)
+          replacement: ${1}
+        - action: labeldrop
+          regex: label_(.+)
+      ingress:
+        enabled: true
+        annotations: *traefikWebinternalAnnotations
+        path: /
+        pathType: Prefix
+        hosts:
+        - your-vmagent.env.example.com
+    vmalert:
+      enabled: false
+      ingress:
+        enabled: true
+        annotations: *traefikWebinternalAnnotations
+    alertmanager:
+      enabled: false
+      ingress:
+        enabled: true
+        annotations: *traefikWebinternalAnnotations
+    grafana:
+      enabled: false
+      ingress:
+        enabled: true
+        annotations: *traefikWebinternalAnnotations
+    kube-state-metrics:
+      extraArgs:
+      - --metric-labels-allowlist=pods=[app,owners],deployments=[app]
+---
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: prometheus-blackbox-exporter
+  namespace: monitor-system
+spec:
+  releaseName: prometheus-blackbox-exporter
+  chart:
+    spec:
+      chart: prometheus-blackbox-exporter
+      version: "5.6.0"
+      sourceRef:
+        kind: HelmRepository
+        name: prometheus-community
+        namespace: flux-system
+  interval: 5m
+  install:
+    remediation:
+      retries: 3
+  # Default values: https://github.com/prometheus-community/helm-charts/blob/main/charts/prometheus-blackbox-exporter/values.yaml
+  values:
+    image:
+      repository: prom/blackbox-exporter
+      tag: v0.20.0
+    ingress:
+      enabled: true
+      annotations:
+        kubernetes.io/ingress.class: traefik
+        traefik.ingress.kubernetes.io/router.entrypoints: web
+      hosts:
+        - host: chart-example.local
+          paths:
+            - path: /
+              pathType: ImplementationSpecific
+    config:
+      modules:
+        http_2xx:
+          prober: http
+          http:
+            valid_status_codes: [200,204]
+            no_follow_redirects: false
+            preferred_ip_protocol: ip4
+            ip_protocol_fallback: false
+
+        httpNoRedirect4ssl:
+          prober: http
+          http:
+            valid_status_codes: [200,204,301,302,303]
+            no_follow_redirects: true
+            preferred_ip_protocol: ip4
+            ip_protocol_fallback: false
+
+        http200igssl:
+          prober: http
+          http:
+            valid_status_codes:
+            - 200
+            tls_config:
+              insecure_skip_verify: true
+
+        http_4xx:
+          prober: http
+          http:
+            valid_status_codes: [401,403,404]
+            preferred_ip_protocol: ip4
+            ip_protocol_fallback: false
+
+        http_5xx:
+          prober: http
+          http:
+            valid_status_codes: [500,502]
+            preferred_ip_protocol: ip4
+            ip_protocol_fallback: false
+
+        http_post_2xx:
+          prober: http
+          http:
+            method: POST
+
+        icmp:
+          prober: icmp
+
+        tcp_connect:
+          prober: tcp
+
+        ssh_banner:
+          prober: tcp
+          tcp:
+            query_response:
+            - expect: "^SSH-2.0-"
+            - send: "SSH-2.0-blackbox-ssh-check"

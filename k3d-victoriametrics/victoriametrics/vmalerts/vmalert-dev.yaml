@@ -1,0 +1,34 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMAlert
+metadata:
+  name: vmalert-dev
+  namespace: monitor-system
+spec:
+  datasource:
+    url: >-
+      http://vmselect-victoria-metrics-k8s-stack.monitor-system.svc:8481/select/210/prometheus
+  evaluationInterval: 60s
+  image:
+    tag: v1.73.0
+  notifiers:
+    - url: http://vmalertmanager-alertmanager:9093
+  remoteRead:
+    url: >-
+      http://vmselect-victoria-metrics-k8s-stack.monitor-system.svc:8481/select/210/prometheus
+  remoteWrite:
+    url: >-
+      http://vminsert-victoria-metrics-k8s-stack.monitor-system.svc:8480/insert/210/prometheus
+  resources: 
+    limits:
+      cpu: 200m
+      memory: 100Mi
+    requests:
+      cpu: 50m
+      memory: 100Mi
+  ruleSelector:
+    matchExpressions:
+    - key: app
+      operator: In
+      values: ["victoria-metrics-k8s-stack", "common"]
+  externalLabels:
+    env: dev

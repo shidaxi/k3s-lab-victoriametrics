@@ -1,0 +1,16 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMStaticScrape
+metadata:
+  name: kafka
+  namespace: monitor-system
+spec:
+  jobName: kafka
+  targetEndpoints:
+  - targets:
+    - kafka1.example.com:11001
+    - kafka2.example.com:11001
+    - kafka3.example.com:11001
+    path: /
+    labels:
+      env: elk-qa
+      service: kafka-jmx-exporter
